@@ -1,0 +1,89 @@
+name: 'Terraform CI - Feature & PR'
+
+on:
+  push:
+    branches:
+      - 'feature'
+      - 'feature/**'
+      - 'feature-*'
+      - 'dev*'
+  pull_request:
+    branches:
+      - 'main'
+    paths:
+      - 'Environment/Dev/**'
+      - 'modules/**'
+      - '.github/workflows/**'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-and-scan:
+    name: '1. Format, Validate & Security Scan'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.0'
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        working-directory: ./Environment/Dev
+        continue-on-error: true
+
+      - name: Terraform Init (Local Validation Mode)
+        run: terraform init -backend=false
+        working-directory: ./Environment/Dev
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate
+        working-directory: ./Environment/Dev
+
+      - name: Run Security Scan (Trivy IaC)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: './Environment/Dev'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+  speculative-plan:
+    name: '2. Azure Login & Terraform Plan'
+    needs: validate-and-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.0'
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        continue-on-error: true
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+        working-directory: ./Environment/Dev
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color
+        working-directory: ./Environment/Dev
+        continue-on-error: true

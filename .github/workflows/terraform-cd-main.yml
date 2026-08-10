@@ -1,0 +1,74 @@
+name: 'Terraform CD - Main Branch Plan & Apply'
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'Environment/Dev/**'
+      - 'modules/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  main-pipeline:
+    name: 'Main Branch Security Scan & Plan'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.0'
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: ./Environment/Dev
+        continue-on-error: true
+
+      - name: Terraform Init (Local Mode)
+        run: terraform init -backend=false
+        working-directory: ./Environment/Dev
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ./Environment/Dev
+
+      - name: Run Security Scan (Trivy IaC)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: './Environment/Dev'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        continue-on-error: true
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init (Backend)
+        run: terraform init -backend=false
+        working-directory: ./Environment/Dev
+
+      - name: Terraform Plan
+        run: terraform plan -no-color
+        working-directory: ./Environment/Dev
+        continue-on-error: true
+
+      # =========================================================================
+      # FUTURE STEP: Uncomment the block below once Azure permissions are granted
+      # =========================================================================
+      # - name: Terraform Apply
+      #   run: terraform apply -auto-approve
+      #   working-directory: ./Environment/Dev
