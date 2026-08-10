@@ -14,6 +14,7 @@ resource_group = {
   }
 }
 
+
 virtual_network = {
   vnet1 = {
     name                = "vnet1"
