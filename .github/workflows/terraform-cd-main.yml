@@ -69,6 +69,6 @@ jobs:
       # =========================================================================
       # FUTURE STEP: Uncomment the block below once Azure permissions are granted
       # =========================================================================
-      # - name: Terraform Apply
-      #   run: terraform apply -auto-approve
-      #   working-directory: ./Environment/Dev
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: ./Environment/Dev
